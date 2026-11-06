@@ -1,0 +1,46 @@
+name: forecast
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC: forecast delivery day D+1 before the noon CET auction
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the forecast, do not commit"
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: repo-write
+  cancel-in-progress: false
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Download GME prices (last ~740 days)
+        run: python src/fetch_gme.py "$(date -u -d '-740 days' +%Y-%m)" "$(date -u +%Y-%m)"
+      - name: Forecast
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            python src/forecast.py --dry-run
+          else
+            python src/forecast.py
+          fi
+      - name: Commit forecast
+        if: ${{ github.event_name == 'schedule' || inputs.dry_run == false }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp "forecasts/$(ls forecasts | grep -E '^[0-9-]{10}\.csv$' | sort | tail -1)" forecasts/latest.csv
+          git add forecasts
+          git commit -m "forecast $(ls forecasts | grep -E '^[0-9-]{10}\.csv$' | sort | tail -1 | sed 's/.csv//') (run ${{ github.run_id }})"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
