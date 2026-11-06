@@ -23,13 +23,46 @@ def session():
     return s
 
 
-def fetch_month(s, y, m):
+def fetch_month_bytes(s, y, m):
     last = calendar.monthrange(y, m)[1]
     p = dict(DataInizio=f"{y}{m:02d}01", DataFine=f"{y}{m:02d}{last}", Date=f"{y}{m:02d}01", Mercato="MGP", Settore="Prezzi", FiltroDate="InizioFine")
     r = s.get(API, params=p, timeout=120)
     if r.status_code != 200 or r.content[:2] != b"PK":
         raise RuntimeError(f"{y}-{m:02d} status={r.status_code} head={r.content[:100]!r}")
-    (RAW / f"{y}{m:02d}.zip").write_bytes(r.content)
+    return r.content
+
+
+def fetch_month(s, y, m):
+    (RAW / f"{y}{m:02d}.zip").write_bytes(fetch_month_bytes(s, y, m))
+
+
+def fetch_prices_memory(start, end, lenient=True):
+    """Return NORD hourly prices as a Series indexed by (date, hour), held in memory only (nothing is written to disk)."""
+    import io
+    rows = []
+    s = session()
+    y, m = map(int, start.split("-")); ye, me = map(int, end.split("-"))
+    while (y, m) <= (ye, me):
+        for t in range(4):
+            try:
+                z = zipfile.ZipFile(io.BytesIO(fetch_month_bytes(s, y, m)))
+                for n in z.namelist():
+                    if re.fullmatch(r"\d{8}MGPPrezzi\.xml", n):  # hourly file only
+                        for el in ET.fromstring(z.read(n)).iter("Prezzi"):
+                            rows.append((el.findtext("Data"), int(el.findtext("Ora")), float(el.findtext("NORD").replace(",", "."))))
+                break
+            except Exception as e:
+                print("retry", y, m, str(e)[:150], flush=True)  # error text only, never prices
+                if t == 3:
+                    if lenient: break
+                    raise
+                time.sleep(10 * (t + 1)); s = session()
+        m += 1
+        if m == 13: y, m = y + 1, 1
+        time.sleep(0.5)
+    df = pd.DataFrame(rows, columns=["date", "hour", "nord"])
+    df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
+    return df.drop_duplicates(["date", "hour"]).set_index(["date", "hour"])["nord"].sort_index()
 
 
 def parse():

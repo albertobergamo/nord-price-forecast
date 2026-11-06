@@ -4,6 +4,11 @@ on:
     - cron: "30 14 * * *"   # after the day-ahead results are published
     - cron: "30 16 * * *"   # retry; scoring is idempotent
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Self-test the scoring path on a past day, print daily rows, write nothing"
+        type: boolean
+        default: true
 permissions:
   contents: write
 concurrency:
@@ -22,10 +27,15 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Download recent GME prices
-        run: python src/fetch_gme.py "$(date -u -d '-10 days' +%Y-%m)" "$(date -u -d '+1 day' +%Y-%m)" --lenient
-      - run: python src/score.py
+      - name: Score (actuals fetched in memory, only daily rows written)
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            python src/score.py --dry-run --selftest "$(date -u -d '-4 days' +%Y-%m-%d)"
+          else
+            python src/score.py
+          fi
       - name: Commit scores
+        if: ${{ github.event_name == 'schedule' || inputs.dry_run == false }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -17,13 +17,11 @@
 </head>
 <body>
 <h1>GME NORD day-ahead: LEAR forward test</h1>
-<p class="mut">Frozen LEAR forecasts committed before 10:00 UTC on D-1 (before the day-ahead auction), scored against published GME prices.
-Pre-registration: <a href="PREREG_FWD.md">PREREG_FWD.md</a>. Source of prices: Gestore dei Mercati Energetici S.p.A. (non-commercial research use).</p>
-<h2 id="t1">Latest scored day</h2>
-<div class="box"><canvas id="c1"></canvas></div>
-<h2 id="t2">Next forecast</h2>
+<p class="mut">Frozen LEAR forecasts committed before 10:00 UTC on D-1 (before the day-ahead auction), scored daily against the published GME results. Only forecasts and daily error summaries are published here, no market prices.
+Pre-registration: <a href="PREREG_FWD.md">PREREG_FWD.md</a>. Market data source: Gestore dei Mercati Energetici S.p.A.</p>
+<h2 id="t2">Latest published forecast</h2>
 <div class="box"><canvas id="c2"></canvas></div>
-<h2>Running MAE (EUR/MWh, on-time forecasts, common hourly sample)</h2>
+<h2>Running mean absolute error (EUR/MWh, on-time forecasts, scored days)</h2>
 <div class="box"><canvas id="c3"></canvas></div>
 <table id="tbl"></table>
 <script>
@@ -38,37 +36,26 @@ function line(id, labels, sets) {
     options: { maintainAspectRatio: false, animation: false, scales: { x: { ticks: { color: css("--mut") }, grid: { color: css("--grid") } }, y: { ticks: { color: css("--mut") }, grid: { color: css("--grid") } } }, plugins: { legend: { labels: { color: css("--fg") } } } } });
 }
 (async () => {
-  const sc = (await csv("scores.csv")).filter(r => r.on_time === "True");
-  const days = [...new Set(sc.map(r => r.delivery_date))].sort();
-  if (days.length) {
-    const d = days[days.length - 1], rows = sc.filter(r => r.delivery_date === d);
-    document.getElementById("t1").textContent = "Latest scored day: " + d;
-    line("c1", rows.map(r => r.hour), [
-      { label: "Actual", data: rows.map(r => +r.actual), borderColor: css("--fg") },
-      { label: "LEAR", data: rows.map(r => +r.lear), borderColor: css("--a") },
-      { label: "naive-1", data: rows.map(r => +r.naive1), borderColor: css("--c"), borderDash: [5, 4] }]);
-    const cum = { lear: [0, 0], naive1: [0, 0], naive7: [0, 0] }, series = { lear: [], naive1: [], naive7: [] };
-    for (const day of days) {
-      for (const r of sc.filter(r => r.delivery_date === day)) {
-        const e = ["lear", "naive1", "naive7"].map(c => +r["ae_" + c]);
-        if (e.some(isNaN) || r.actual === "") continue;
-        ["lear", "naive1", "naive7"].forEach((c, i) => { cum[c][0] += e[i]; cum[c][1]++; });
-      }
-      for (const c in cum) series[c].push(cum[c][1] ? cum[c][0] / cum[c][1] : null);
-    }
-    line("c3", days, [
+  const sc = (await csv("scores.csv")).filter(r => r.on_time === "True").sort((x, y) => x.delivery_date < y.delivery_date ? -1 : 1);
+  const names = ["lear", "naive1", "naive7"], cum = { lear: [0, 0], naive1: [0, 0], naive7: [0, 0] }, series = { lear: [], naive1: [], naive7: [] };
+  for (const r of sc) {
+    const n = +r.n_hours;
+    for (const c of names) { cum[c][0] += n * +r["mae_" + c]; cum[c][1] += n; series[c].push(cum[c][0] / cum[c][1]); }
+  }
+  if (sc.length) {
+    line("c3", sc.map(r => r.delivery_date), [
       { label: "LEAR", data: series.lear, borderColor: css("--a") },
       { label: "naive-1", data: series.naive1, borderColor: css("--b") },
       { label: "naive-7", data: series.naive7, borderColor: css("--c") }]);
     const f = c => series[c][series[c].length - 1];
     document.getElementById("tbl").innerHTML = "<tr><th>Scored days</th><th>LEAR MAE</th><th>naive-1 MAE</th><th>naive-7 MAE</th></tr>" +
-      `<tr><td>${days.length}</td><td>${f("lear").toFixed(2)}</td><td>${f("naive1").toFixed(2)}</td><td>${f("naive7").toFixed(2)}</td></tr>`;
-  } else document.getElementById("t1").textContent = "Latest scored day: none yet";
+      `<tr><td>${sc.length}</td><td>${f("lear").toFixed(2)}</td><td>${f("naive1").toFixed(2)}</td><td>${f("naive7").toFixed(2)}</td></tr>`;
+  } else document.getElementById("tbl").innerHTML = "<tr><td>No scored days yet.</td></tr>";
   const nx = await csv("forecasts/latest.csv");
   if (nx.length) {
-    document.getElementById("t2").textContent = "Next forecast: " + nx[0].delivery_date + " (generated " + nx[0].generated_utc + ")";
+    document.getElementById("t2").textContent = "Latest published forecast: " + nx[0].delivery_date + " (generated " + nx[0].generated_utc + ")";
     line("c2", nx.map(r => r.hour), [{ label: "LEAR forecast", data: nx.map(r => +r.lear), borderColor: css("--a") }]);
-  } else document.getElementById("t2").textContent = "Next forecast: none yet";
+  } else document.getElementById("t2").textContent = "Latest published forecast: none yet";
 })();
 </script>
 </body>
