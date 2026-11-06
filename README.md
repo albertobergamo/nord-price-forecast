@@ -18,3 +18,4 @@ Not investment advice. Research project.
 
 ## Changelog (infrastructure only)
 - 2026-11-06: initial version.
+- 2026-11-06: score workflow no longer fails when scores.csv does not exist yet (no change to model or forecasts).

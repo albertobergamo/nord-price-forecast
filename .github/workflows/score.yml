@@ -29,6 +29,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          [ -f scores.csv ] || { echo "no scores yet"; exit 0; }
           git add scores.csv
           git diff --cached --quiet && echo "nothing to commit" && exit 0
           git commit -m "scores (run ${{ github.run_id }})"
