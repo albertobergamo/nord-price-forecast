@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NORD price forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --mut:#666; --grid:#e5e5e5; --a:#1f6feb; --b:#d1242f; --c:#8a8a8a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0e1116; --fg:#e6e6e6; --mut:#9aa0a6; --grid:#2a2f37; --a:#58a6ff; --b:#ff7b72; --c:#9aa0a6; } }
+  body { background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,sans-serif; margin:0 auto; max-width:900px; padding:16px; }
+  h1 { font-size:1.4rem; margin:.2em 0; } h2 { font-size:1.05rem; margin:1.6em 0 .4em; }
+  .mut { color:var(--mut); font-size:.9rem; }
+  .box { position:relative; height:300px; } table { border-collapse:collapse; width:100%; }
+  td,th { padding:4px 8px; border-bottom:1px solid var(--grid); text-align:right; } th:first-child,td:first-child { text-align:left; }
+</style>
+</head>
+<body>
+<h1>GME NORD day-ahead: LEAR forward test</h1>
+<p class="mut">Frozen LEAR forecasts committed before 10:00 UTC on D-1 (before the day-ahead auction), scored against published GME prices.
+Pre-registration: <a href="PREREG_FWD.md">PREREG_FWD.md</a>. Source of prices: Gestore dei Mercati Energetici S.p.A. (non-commercial research use).</p>
+<h2 id="t1">Latest scored day</h2>
+<div class="box"><canvas id="c1"></canvas></div>
+<h2 id="t2">Next forecast</h2>
+<div class="box"><canvas id="c2"></canvas></div>
+<h2>Running MAE (EUR/MWh, on-time forecasts, common hourly sample)</h2>
+<div class="box"><canvas id="c3"></canvas></div>
+<table id="tbl"></table>
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+async function csv(url) {
+  const r = await fetch(url + "?t=" + Date.now()); if (!r.ok) return [];
+  const [h, ...ls] = (await r.text()).trim().split("\n"); const k = h.split(",");
+  return ls.filter(Boolean).map(l => Object.fromEntries(l.split(",").map((v, i) => [k[i], v])));
+}
+function line(id, labels, sets) {
+  new Chart(document.getElementById(id), { type: "line", data: { labels, datasets: sets.map(s => ({ pointRadius: 0, borderWidth: 2, tension: 0, ...s })) },
+    options: { maintainAspectRatio: false, animation: false, scales: { x: { ticks: { color: css("--mut") }, grid: { color: css("--grid") } }, y: { ticks: { color: css("--mut") }, grid: { color: css("--grid") } } }, plugins: { legend: { labels: { color: css("--fg") } } } } });
+}
+(async () => {
+  const sc = (await csv("scores.csv")).filter(r => r.on_time === "True");
+  const days = [...new Set(sc.map(r => r.delivery_date))].sort();
+  if (days.length) {
+    const d = days[days.length - 1], rows = sc.filter(r => r.delivery_date === d);
+    document.getElementById("t1").textContent = "Latest scored day: " + d;
+    line("c1", rows.map(r => r.hour), [
+      { label: "Actual", data: rows.map(r => +r.actual), borderColor: css("--fg") },
+      { label: "LEAR", data: rows.map(r => +r.lear), borderColor: css("--a") },
+      { label: "naive-1", data: rows.map(r => +r.naive1), borderColor: css("--c"), borderDash: [5, 4] }]);
+    const cum = { lear: [0, 0], naive1: [0, 0], naive7: [0, 0] }, series = { lear: [], naive1: [], naive7: [] };
+    for (const day of days) {
+      for (const r of sc.filter(r => r.delivery_date === day)) {
+        const e = ["lear", "naive1", "naive7"].map(c => +r["ae_" + c]);
+        if (e.some(isNaN) || r.actual === "") continue;
+        ["lear", "naive1", "naive7"].forEach((c, i) => { cum[c][0] += e[i]; cum[c][1]++; });
+      }
+      for (const c in cum) series[c].push(cum[c][1] ? cum[c][0] / cum[c][1] : null);
+    }
+    line("c3", days, [
+      { label: "LEAR", data: series.lear, borderColor: css("--a") },
+      { label: "naive-1", data: series.naive1, borderColor: css("--b") },
+      { label: "naive-7", data: series.naive7, borderColor: css("--c") }]);
+    const f = c => series[c][series[c].length - 1];
+    document.getElementById("tbl").innerHTML = "<tr><th>Scored days</th><th>LEAR MAE</th><th>naive-1 MAE</th><th>naive-7 MAE</th></tr>" +
+      `<tr><td>${days.length}</td><td>${f("lear").toFixed(2)}</td><td>${f("naive1").toFixed(2)}</td><td>${f("naive7").toFixed(2)}</td></tr>`;
+  } else document.getElementById("t1").textContent = "Latest scored day: none yet";
+  const nx = await csv("forecasts/latest.csv");
+  if (nx.length) {
+    document.getElementById("t2").textContent = "Next forecast: " + nx[0].delivery_date + " (generated " + nx[0].generated_utc + ")";
+    line("c2", nx.map(r => r.hour), [{ label: "LEAR forecast", data: nx.map(r => +r.lear), borderColor: css("--a") }]);
+  } else document.getElementById("t2").textContent = "Next forecast: none yet";
+})();
+</script>
+</body>
+</html>
