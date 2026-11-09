@@ -32,6 +32,8 @@ The forecast is verified if all of these hold:
 3. The commit that added `forecasts/D.csv` is authored by `github-actions[bot]` and its subject ends with `(run <run_id>)`.
 4. That commit also contains `forecasts/D.meta.json`, and `headSha` of the run is its ancestor: `git merge-base --is-ancestor <headSha> <commit>`.
 
+5. OpenTimestamps: `ots verify forecasts/$D.csv.ots` reports a Bitcoin attestation (block time) before `(D-1)T10:00:00Z`. Proofs are created pending by CI and completed in place by the single `ots upgrade` pass in `scripts/archive_runs.sh`; commit the upgraded `.ots` files. `ots verify` needs a local Bitcoin Core node (or use the web verifier at opentimestamps.org with the CSV and the `.ots`). The block time is an upper bound on when the CSV existed and lags the run by hours (calendar aggregation), so a late block weakens this evidence only; it does not replace checks 1-4. A missing `.ots` (stamp step is best effort) does not invalidate a forecast.
+
 Note: `headSha` is the commit the run checked out when it started, so it does not contain `forecasts/D.csv`; the CSV is created by the run and committed at its end (check 3-4).
 
 GitHub deletes run logs after 90 days by default. Run `scripts/archive_runs.sh` (writes `audit/runs.json`) at the end of the test and in any case by 2027-02-01, then commit the file.
@@ -44,3 +46,4 @@ GitHub deletes run logs after 90 days by default. Run `scripts/archive_runs.sh` 
 - 2026-11-09 (deviation log): 3 delivery days missing (2026-11-08, 2026-11-09, 2026-11-10) because GitHub delayed the scheduled cron past the 10:00 UTC guard. Infrastructural cause, independent of prices. Mitigation: backup crons 04:17 and 06:17 UTC; `src/forecast.py` skips with exit 0 if the day's forecast already exists (first-write-wins, never overwrites). The 10:00 UTC guard, the model, PREREG_FWD.md and the actuals are unchanged.
 - 2026-11-09: audit metadata added. Each new forecast now also writes `forecasts/D.meta.json` (delivery_date, generated_at_utc, run_id = GITHUB_RUN_ID or "local"), committed with the CSV; the CSV is unchanged. The already-forecast skip now runs before the 10:00 UTC guard (the guard itself is unchanged). No impact on the model or PREREG_FWD.md.
 - 2026-11-09: README "Verifica" section and `scripts/archive_runs.sh` added (documentation and audit tooling only; not run yet). No impact on the model or PREREG_FWD.md.
+- 2026-11-09: best-effort OpenTimestamps step in `forecast.yml` (`ots stamp forecasts/D.csv`, `continue-on-error`, warning on failure, never blocks the commit); `ots upgrade` pass added to `scripts/archive_runs.sh`; README "Verifica" extended. No impact on the model, the CSV or PREREG_FWD.md.\n

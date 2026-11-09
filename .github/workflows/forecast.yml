@@ -37,6 +37,15 @@ jobs:
           else
             python src/forecast.py
           fi
+      - name: Timestamp forecast (OpenTimestamps, best effort)
+        if: ${{ github.event_name == 'schedule' || inputs.dry_run == false }}
+        continue-on-error: true
+        run: |
+          f="forecasts/$(ls forecasts | grep -E '^[0-9-]{10}\.csv$' | sort | tail -1)"
+          if [ ! -f "$f" ]; then echo "no forecast csv, nothing to stamp"; exit 0; fi
+          if [ -f "$f.ots" ]; then echo "$f already stamped"; exit 0; fi
+          pip install -q opentimestamps-client && timeout 180 ots stamp "$f" \
+            || echo "::warning::OpenTimestamps stamp failed for $f; forecast is committed without .ots"
       - name: Commit forecast
         if: ${{ github.event_name == 'schedule' || inputs.dry_run == false }}
         run: |
