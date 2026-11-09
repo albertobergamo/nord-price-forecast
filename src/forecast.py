@@ -17,7 +17,7 @@ if not a.dry_run and now.hour >= 10 and F == pd.Timestamp(now.date()) + pd.Timed
     sys.exit(f"refusing: {now:%H:%M} UTC is not before 10:00 UTC; forecast for {F.date()} would not be provably pre-auction")
 out = ROOT / "forecasts" / f"{F:%Y-%m-%d}.csv"
 if out.exists():
-    sys.exit(f"{out.name} exists; forecasts are immutable")
+    print(f"already forecast, skip: {out.name} exists (first-write-wins, never overwritten)"); sys.exit(0)
 days, R, Pi = load_prices(ROOT / "data" / "gme_nord.csv")
 if days[-1] != F - pd.Timedelta(days=1):
     sys.exit(f"data ends {days[-1].date()}, need {(F - pd.Timedelta(days=1)).date()} for delivery day {F.date()}")
