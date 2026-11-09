@@ -1,7 +1,7 @@
 name: forecast
 on:
   schedule:
-    - cron: "0 8 * * *"   # 08:00 UTC: forecast delivery day D+1 before the noon CET auction
+    - cron: "17 2 * * *"  # 02:17 UTC (off the :00 peak): GitHub delayed the 08:00 runs by ~6.7h on 2026-11-07/08, past the 10:00 UTC guard in forecast.py
   workflow_dispatch:
     inputs:
       dry_run:
