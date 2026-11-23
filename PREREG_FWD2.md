@@ -15,7 +15,7 @@ A frozen LEAR model (Lago et al., 2021, no exogenous variables) forecasts GME NO
 
 ## Information timing
 - The job may run any time after the D-1 results are published and must commit before 10:00 UTC on D-1, using only GME NORD prices through D-1. Nothing about D is used.
-- The day-ahead gate for D closes at 12:00 CET on X, i.e. 10:00 or 11:00 UTC. `src/forecast.py` refuses to write a forecast unless it is generated before 10:00 UTC on D-1.
+- The day-ahead gate for D closes at 12:00 CET on D-1, i.e. 10:00 or 11:00 UTC. `src/forecast.py` refuses to write a forecast unless it is generated before 10:00 UTC on D-1.
 - Proof of timing: the first commit adding `forecasts/D.csv`, authored by `github-actions[bot]`, together with the public Actions run metadata (run id in the commit message). Git committer dates can be forged by a repository owner, so the Actions run record is the reference; the owner is not claimed to be unable to alter history, only that the public record is checkable.
 
 ## Test window
