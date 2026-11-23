@@ -1,12 +1,15 @@
-"""Pre-registered forward evaluation (PREREG_FWD.md): 60 delivery days from 2026-11-08, same PASS rule as H2.
+"""Pre-registered forward evaluation: 60 delivery days, same PASS rule as H2.
+--prereg fwd: PREREG_FWD.md, from 2026-11-08 (INVALID, 8/60 missing). --prereg fwd2 (default): PREREG_FWD2.md, from 2026-11-28.
 Computed from the daily rows of scores.csv only (pooled hourly MAE = n_hours-weighted mean of the daily MAEs)."""
-import json
+import argparse, json
 from pathlib import Path
 import numpy as np, pandas as pd, statsmodels.api as sm
 from scipy.stats import norm
 
 ROOT = Path(__file__).resolve().parent.parent
-FIRST, N_DAYS, MAX_MISSING = pd.Timestamp("2026-11-08"), 60, 6
+ap = argparse.ArgumentParser(); ap.add_argument("--prereg", choices=["fwd", "fwd2"], default="fwd2")
+FIRST = pd.Timestamp({"fwd": "2026-11-08", "fwd2": "2026-11-28"}[ap.parse_args().prereg])
+N_DAYS, MAX_MISSING = 60, 6
 dates = [FIRST + pd.Timedelta(days=i) for i in range(N_DAYS)]
 for d in dates:  # no DST transition day in the window: every delivery day has exactly 24 hours
     assert (d + pd.Timedelta(days=1)).tz_localize("Europe/Rome") - d.tz_localize("Europe/Rome") == pd.Timedelta(hours=24), f"DST day {d.date()} in window"

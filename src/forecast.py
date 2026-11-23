@@ -1,8 +1,9 @@
-"""Forecast delivery day F (default: tomorrow, UTC) with the frozen H2 LEAR; write forecasts/F.csv (never overwrites).
+"""Forecast delivery day F (default: see below) with the frozen H2 LEAR; write forecasts/F.csv (never overwrites).
 
-The scheduled workflow is only valid before 10:00 UTC (see PREREG_FWD.md): later runs are refused unless --dry-run.
+Default F = (last day in data/gme_nord.csv with all 24 hours) + 1. A non-dry run is refused from 10:00 UTC on F-1 (see PREREG_FWD2.md).
 """
 import argparse, datetime as dt, json, os, sys
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import numpy as np, pandas as pd
 from lear import load_prices, forecast_day
@@ -12,15 +13,23 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--date"); ap.add_argument("--dry-run", action="store_true")
 a = ap.parse_args()
 now = dt.datetime.now(dt.timezone.utc)
-F = pd.Timestamp(a.date) if a.date else pd.Timestamp(now.date()) + pd.Timedelta(days=1)
+days, R, Pi = load_prices(ROOT / "data" / "gme_nord.csv")
+if a.date:
+    F = pd.Timestamp(a.date)
+else:  # day after the last complete day (non-NaN hours == expected: 23 on spring-forward in Europe/Rome, else 24); a partial last day is itself the target
+    rome = lambda d: d.tz_localize(ZoneInfo("Europe/Rome"))
+    expected = np.array([min(24, int((rome(d + pd.Timedelta(days=1)) - rome(d)) / pd.Timedelta(hours=1))) for d in days])
+    F = days[(~np.isnan(R)).sum(axis=1) == expected][-1] + pd.Timedelta(days=1)
 out = ROOT / "forecasts" / f"{F:%Y-%m-%d}.csv"
 if out.exists():
     print(f"already forecast, skip: {out.name} exists (first-write-wins, never overwritten)"); sys.exit(0)
-if not a.dry_run and now.hour >= 10 and F == pd.Timestamp(now.date()) + pd.Timedelta(days=1):
-    sys.exit(f"refusing: {now:%H:%M} UTC is not before 10:00 UTC; forecast for {F.date()} would not be provably pre-auction")
-days, R, Pi = load_prices(ROOT / "data" / "gme_nord.csv")
-if days[-1] != F - pd.Timedelta(days=1):
+deadline = (F - pd.Timedelta(days=1)).tz_localize("UTC") + pd.Timedelta(hours=10)
+if not a.dry_run and pd.Timestamp(now) >= deadline:
+    sys.exit(f"refusing: {now:%Y-%m-%d %H:%M} UTC is not before {deadline:%Y-%m-%d %H:%M} UTC; forecast for {F.date()} would not be provably pre-auction")
+if a.date and days[-1] != F - pd.Timedelta(days=1):
     sys.exit(f"data ends {days[-1].date()}, need {(F - pd.Timedelta(days=1)).date()} for delivery day {F.date()}")
+keep = days < F  # drop a partial day F (and anything later) so F is only appended once; no-op when data ends at F-1
+days, R, Pi = days[keep], R[keep], Pi[keep]
 days = days.append(pd.DatetimeIndex([F]))
 R = np.vstack([R, np.full((1, 24), np.nan)]); Pi = np.vstack([Pi, np.full((1, 24), np.nan)])
 p = forecast_day(days, R, Pi, F)

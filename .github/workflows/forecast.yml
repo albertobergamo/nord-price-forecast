@@ -1,9 +1,8 @@
 name: forecast
 on:
   schedule:
-    - cron: "17 2 * * *"  # 02:17 UTC (off the :00 peak): GitHub delayed the 08:00 runs by ~6.7h on 2026-11-07/08, past the 10:00 UTC guard in forecast.py
-    - cron: "17 4 * * *"  # backup: no-op if forecasts/D.csv already exists
-    - cron: "17 6 * * *"  # backup: no-op if forecasts/D.csv already exists
+    - cron: "17 13,17,21 * * *"  # no-op if forecasts/D.csv already exists
+    - cron: "17 1,5 * * *"  # no-op if forecasts/D.csv already exists
   workflow_dispatch:
     inputs:
       dry_run:
@@ -29,7 +28,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Download GME prices (last ~740 days)
-        run: python src/fetch_gme.py "$(date -u -d '-740 days' +%Y-%m)" "$(date -u +%Y-%m)"
+        run: python src/fetch_gme.py "$(date -u -d '-740 days' +%Y-%m)" "$(date -u -d '+1 day' +%Y-%m)"
       - name: Forecast
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
